@@ -1,0 +1,5 @@
+{
+  "name": "AI 变装工作室",
+  "description": "基于 Nano Banana (Gemini 2.5 Flash Image) 的智能换装应用，支持自定义人脸与服装生成。",
+  "requestFramePermissions": []
+}
