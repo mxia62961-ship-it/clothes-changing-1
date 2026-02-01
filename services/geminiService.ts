@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { stripBase64Prefix, getMimeTypeFromBase64 } from "../utils";
 
 const apiKey = process.env.API_KEY || '';
@@ -6,6 +6,25 @@ const ai = new GoogleGenAI({ apiKey });
 
 // Using the prompt guidelines for "nano banana"
 const MODEL_NAME = 'gemini-2.5-flash-image';
+
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+];
 
 export const generateClothingFromText = async (prompt: string): Promise<string> => {
   if (!apiKey) throw new Error("API Key 未设置");
@@ -20,7 +39,7 @@ export const generateClothingFromText = async (prompt: string): Promise<string> 
       model: MODEL_NAME,
       contents: fullPrompt,
       config: {
-        // No thinking budget needed for simple image gen
+        safetySettings,
       }
     });
 
@@ -76,6 +95,9 @@ export const generateTryOnEffect = async (personBase64: string, clothBase64: str
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: { parts: parts },
+      config: {
+        safetySettings,
+      }
     });
 
      const resParts = response.candidates?.[0]?.content?.parts;
@@ -128,6 +150,9 @@ export const editGeneratedImage = async (base64Image: string, prompt: string): P
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: { parts: parts },
+      config: {
+        safetySettings,
+      }
     });
 
     const resParts = response.candidates?.[0]?.content?.parts;
