@@ -3,7 +3,7 @@ import { TiltCard } from './components/TiltCard';
 import { ImageAsset, Step, LoadingState, HistoryItem } from './types';
 import { PRESET_PERSON_IMAGES, PRESET_CLOTHING_IMAGES, STEP_DESCRIPTIONS } from './constants';
 import { fileToBase64, urlToBase64 } from './utils';
-import { generateClothingFromText, generateTryOnEffect } from './services/geminiService';
+import { generateClothingFromText, generateTryOnEffect, editGeneratedImage } from './services/geminiService';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<Step>(Step.SelectPerson);
@@ -21,6 +21,7 @@ const App: React.FC = () => {
   
   // Inputs
   const [clothingPrompt, setClothingPrompt] = useState('');
+  const [editPrompt, setEditPrompt] = useState('');
 
   // Helper to ensure we have base64 for API calls
   const ensureBase64 = async (asset: ImageAsset): Promise<string> => {
@@ -110,8 +111,39 @@ const App: React.FC = () => {
       };
       setHistory(prev => [newHistoryItem, ...prev]);
       setCurrentStep(Step.Result);
-    } catch (err) {
-      setErrorMessage("生成试穿效果失败，可能是图片跨域问题或网络原因。建议使用本地上传的图片。");
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || "生成试穿效果失败，可能是图片跨域问题或网络原因。");
+    } finally {
+      setLoadingState('idle');
+    }
+  };
+
+  const handleEditImage = async () => {
+    if (!resultImage || !editPrompt.trim()) return;
+    setLoadingState('editing_image');
+    setErrorMessage(null);
+
+    try {
+      const newResultB64 = await editGeneratedImage(resultImage, editPrompt);
+      setResultImage(newResultB64);
+      setEditPrompt('');
+      
+      // Optionally add the edited version to history as well
+      if (personImage && clothingImage) {
+        const newHistoryItem: HistoryItem = {
+          id: `edit_${Date.now()}`,
+          personImage: personImage.url,
+          clothingImage: clothingImage.url,
+          resultImage: newResultB64,
+          timestamp: Date.now()
+        };
+        setHistory(prev => [newHistoryItem, ...prev]);
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || "编辑图片失败，请稍后重试。");
     } finally {
       setLoadingState('idle');
     }
@@ -123,6 +155,7 @@ const App: React.FC = () => {
     setResultImage(null);
     setCurrentStep(Step.SelectPerson);
     setErrorMessage(null);
+    setEditPrompt('');
   };
 
   return (
@@ -170,7 +203,7 @@ const App: React.FC = () => {
 
         {/* Error Message */}
         {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm text-center mx-auto max-w-lg">
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm text-center mx-auto max-w-lg animate-fadeIn">
             {errorMessage}
           </div>
         )}
@@ -185,6 +218,7 @@ const App: React.FC = () => {
                 {loadingState === 'converting_preset' && '正在处理图片...'}
                 {loadingState === 'generating_clothing' && '正在设计服装...'}
                 {loadingState === 'generating_tryon' && '正在生成试穿效果...'}
+                {loadingState === 'editing_image' && '正在进行AI调整...'}
               </p>
             </div>
           )}
@@ -303,11 +337,36 @@ const App: React.FC = () => {
                 <img src={resultImage} alt="Result" className="w-full h-auto" />
               </div>
 
-              <div className="flex gap-4 mt-8">
+              {/* Edit Section */}
+              <div className="w-full max-w-sm mt-6">
+                <label className="block text-sm font-semibold text-slate-700 mb-2 px-1">
+                  AI 细节调整
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    placeholder="例如：添加复古滤镜、背景变模糊..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleEditImage()}
+                    className="flex-1 rounded-full bg-slate-100 border-none px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none placeholder-slate-400"
+                  />
+                  <button
+                    onClick={handleEditImage}
+                    disabled={!editPrompt.trim() || loadingState !== 'idle'}
+                    className="bg-indigo-600 text-white px-5 py-2 rounded-full text-sm font-bold shadow-md hover:bg-indigo-700 transition disabled:opacity-50 disabled:shadow-none whitespace-nowrap"
+                  >
+                    调整
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-4 mt-8 flex-wrap justify-center">
                  <button 
                   onClick={() => {
                     setResultImage(null);
                     setCurrentStep(Step.SelectClothing);
+                    setEditPrompt('');
                   }}
                   className="px-6 py-2 rounded-full border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium transition"
                 >

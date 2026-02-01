@@ -29,3 +29,8 @@ export const urlToBase64 = async (url: string): Promise<string> => {
 export const stripBase64Prefix = (base64: string): string => {
   return base64.replace(/^data:image\/(png|jpg|jpeg|webp);base64,/, '');
 };
+
+export const getMimeTypeFromBase64 = (base64: string): string => {
+  const match = base64.match(/^data:(image\/[a-zA-Z]+);base64,/);
+  return match ? match[1] : 'image/jpeg';
+};

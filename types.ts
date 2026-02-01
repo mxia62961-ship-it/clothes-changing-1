@@ -19,4 +19,4 @@ export enum Step {
   Result = 3,
 }
 
-export type LoadingState = 'idle' | 'generating_clothing' | 'generating_tryon' | 'converting_preset';
+export type LoadingState = 'idle' | 'generating_clothing' | 'generating_tryon' | 'converting_preset' | 'editing_image';

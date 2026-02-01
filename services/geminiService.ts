@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { stripBase64Prefix } from "../utils";
+import { stripBase64Prefix, getMimeTypeFromBase64 } from "../utils";
 
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
@@ -46,26 +46,29 @@ export const generateTryOnEffect = async (personBase64: string, clothBase64: str
 
   const personData = stripBase64Prefix(personBase64);
   const clothData = stripBase64Prefix(clothBase64);
+  
+  const personMime = getMimeTypeFromBase64(personBase64);
+  const clothMime = getMimeTypeFromBase64(clothBase64);
 
   // Construct a multimodal prompt
   const parts = [
     {
       inlineData: {
-        mimeType: 'image/jpeg', // Assuming jpeg/png, standardizing
+        mimeType: personMime,
         data: personData
       }
     },
     {
-      text: "Look at the person in the previous image."
+      text: "This is the person."
     },
     {
       inlineData: {
-        mimeType: 'image/jpeg',
+        mimeType: clothMime,
         data: clothData
       }
     },
     {
-      text: "Look at the clothing in the previous image. Generate a high-quality, realistic full-body photo of the person from the first image wearing the clothing from the second image. Maintain the person's pose, facial features, body shape, and the clothing's texture and design details. The lighting should be natural."
+      text: "This is the clothing. Generate a realistic full-body photo of the person wearing the clothing. Preserve the person's identity, pose, and body shape. Preserve the clothing's details and texture. Ensure high quality and natural lighting."
     }
   ];
 
@@ -77,15 +80,71 @@ export const generateTryOnEffect = async (personBase64: string, clothBase64: str
 
      const resParts = response.candidates?.[0]?.content?.parts;
      if (resParts) {
+       // Search for image part
        for (const part of resParts) {
          if (part.inlineData && part.inlineData.data) {
            return `data:image/png;base64,${part.inlineData.data}`;
          }
        }
+       // If no image, check for text to provide better error
+       const textPart = resParts.find(p => p.text);
+       if (textPart && textPart.text) {
+          throw new Error(`模型未生成图片，返回信息: ${textPart.text.substring(0, 100)}...`);
+       }
      }
+     
+     // Additional check for finish reason if available
+     const candidate = response.candidates?.[0];
+     if (candidate && candidate.finishReason && candidate.finishReason !== 'STOP') {
+        throw new Error(`生成因 ${candidate.finishReason} 停止，可能触发了安全策略。`);
+     }
+
      throw new Error("未能生成试穿效果，请重试。");
   } catch (error) {
     console.error("Generate Try-On Error:", error);
+    throw error;
+  }
+};
+
+export const editGeneratedImage = async (base64Image: string, prompt: string): Promise<string> => {
+  if (!apiKey) throw new Error("API Key 未设置");
+
+  const imageMime = getMimeTypeFromBase64(base64Image);
+  const imageData = stripBase64Prefix(base64Image);
+
+  const parts = [
+    {
+      inlineData: {
+        mimeType: imageMime,
+        data: imageData
+      }
+    },
+    {
+      text: `Edit this image. ${prompt}. Maintain the main subject's identity and key elements unless specified otherwise. Output high quality image.`
+    }
+  ];
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: { parts: parts },
+    });
+
+    const resParts = response.candidates?.[0]?.content?.parts;
+    if (resParts) {
+      for (const part of resParts) {
+        if (part.inlineData && part.inlineData.data) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
+      const textPart = resParts.find(p => p.text);
+      if (textPart && textPart.text) {
+         throw new Error(`模型未生成编辑图片: ${textPart.text.substring(0, 100)}...`);
+      }
+    }
+    throw new Error("未能完成图片编辑，请重试。");
+  } catch (error) {
+    console.error("Edit Image Error:", error);
     throw error;
   }
 };
